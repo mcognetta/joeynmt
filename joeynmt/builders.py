@@ -35,8 +35,10 @@ def build_activation(activation: str = "relu") -> Callable:
     elif activation == "swish":
         return nn.SiLU
     else:
-        raise ConfigurationError("Invalid activation function. Valid options: "
-                                 "'relu', 'gelu', 'tanh', 'swish'.")
+        raise ConfigurationError(
+            "Invalid activation function. Valid options: "
+            "'relu', 'gelu', 'tanh', 'swish'."
+        )
 
 
 def build_gradient_clipper(config: dict) -> Optional[Callable]:
@@ -55,15 +57,18 @@ def build_gradient_clipper(config: dict) -> Optional[Callable]:
     """
     if "clip_grad_val" in config.keys() and "clip_grad_norm" in config.keys():
         raise ConfigurationError(
-            "You can only specify either clip_grad_val or clip_grad_norm.")
+            "You can only specify either clip_grad_val or clip_grad_norm."
+        )
 
     clip_grad_fun = None
     if "clip_grad_val" in config.keys():
-        clip_grad_fun = partial(nn.utils.clip_grad_value_,
-                                clip_value=config["clip_grad_val"])
+        clip_grad_fun = partial(
+            nn.utils.clip_grad_value_, clip_value=config["clip_grad_val"]
+        )
     elif "clip_grad_norm" in config.keys():
-        clip_grad_fun = partial(nn.utils.clip_grad_norm_,
-                                max_norm=config["clip_grad_norm"])
+        clip_grad_fun = partial(
+            nn.utils.clip_grad_norm_, max_norm=config["clip_grad_norm"]
+        )
     return clip_grad_fun
 
 
@@ -77,6 +82,7 @@ def build_optimizer(config: dict, parameters: Generator) -> Optimizer:
     Currently supported configuration settings for "optimizer":
         - "sgd" (default): see `torch.optim.SGD`
         - "adam": see `torch.optim.adam`
+        - "adamw": see `torch.optim.adamw`
         - "adagrad": see `torch.optim.adagrad`
         - "adadelta": see `torch.optim.adadelta`
         - "rmsprop": see `torch.optim.RMSprop`
@@ -103,6 +109,9 @@ def build_optimizer(config: dict, parameters: Generator) -> Optimizer:
     if optimizer_name == "adam":
         kwargs["betas"] = config.get("adam_betas", (0.9, 0.999))
         optimizer = torch.optim.Adam(parameters, **kwargs)
+    elif optimizer_name == "adamw":
+        kwargs["betas"] = config.get("adam_betas", (0.0, 0.999))
+        optimizer = torch.optim.AdamW(parameters, **kwargs)
     elif optimizer_name == "adagrad":
         optimizer = torch.optim.Adagrad(parameters, **kwargs)
     elif optimizer_name == "adadelta":
@@ -114,8 +123,10 @@ def build_optimizer(config: dict, parameters: Generator) -> Optimizer:
         kwargs["momentum"] = config.get("momentum", 0.0)
         optimizer = torch.optim.SGD(parameters, **kwargs)
     else:
-        raise ConfigurationError("Invalid optimizer. Valid options: 'adam', "
-                                 "'adagrad', 'adadelta', 'rmsprop', 'sgd'.")
+        raise ConfigurationError(
+            "Invalid optimizer. Valid options: 'adam', "
+            "'adamw', 'adagrad', 'adadelta', 'rmsprop', 'sgd'."
+        )
 
     logger.info(
         "%s(%s)",
@@ -220,9 +231,9 @@ def build_scheduler(
 
     # print log
     if scheduler_name in [
-            "noam",
-            "warmupexponentialdecay",
-            "warmupinversesquareroot",
+        "noam",
+        "warmupexponentialdecay",
+        "warmupinversesquareroot",
     ]:
         logger.info(scheduler)
     else:
@@ -300,8 +311,8 @@ class NoamScheduler(BaseScheduler):
     def _compute_rate(self):
         """Implement `lrate` above"""
         step = self._step
-        upper_bound = min(step**(-0.5), step * self.warmup**(-1.5))
-        return self.factor * (self.hidden_size**(-0.5) * upper_bound)
+        upper_bound = min(step ** (-0.5), step * self.warmup ** (-1.5))
+        return self.factor * (self.hidden_size ** (-0.5) * upper_bound)
 
     def state_dict(self):
         """Returns dictionary of values necessary to reconstruct scheduler"""
@@ -319,8 +330,10 @@ class NoamScheduler(BaseScheduler):
         self.hidden_size = state_dict["hidden_size"]
 
     def __repr__(self):
-        return (f"{self.__class__.__name__}(warmup={self.warmup}, "
-                f"factor={self.factor}, hidden_size={self.hidden_size})")
+        return (
+            f"{self.__class__.__name__}(warmup={self.warmup}, "
+            f"factor={self.factor}, hidden_size={self.hidden_size})"
+        )
 
 
 class WarmupExponentialDecayScheduler(BaseScheduler):
@@ -388,11 +401,13 @@ class WarmupExponentialDecayScheduler(BaseScheduler):
         self.min_rate = state_dict["min_rate"]
 
     def __repr__(self):
-        return (f"{self.__class__.__name__}(warmup={self.warmup}, "
-                f"decay_length={self.decay_length}, "
-                f"decay_rate={self.decay_rate}, "
-                f"peak_rate={self.peak_rate}, "
-                f"min_rate={self.min_rate})")
+        return (
+            f"{self.__class__.__name__}(warmup={self.warmup}, "
+            f"decay_length={self.decay_length}, "
+            f"decay_rate={self.decay_rate}, "
+            f"peak_rate={self.peak_rate}, "
+            f"min_rate={self.min_rate})"
+        )
 
 
 class WarmupInverseSquareRootScheduler(BaseScheduler):
@@ -458,6 +473,8 @@ class WarmupInverseSquareRootScheduler(BaseScheduler):
         self.min_rate = state_dict["min_rate"]
 
     def __repr__(self):
-        return (f"{self.__class__.__name__}(warmup={self.warmup}, "
-                f"decay_rate={self.decay_rate:.6f}, peak_rate={self.peak_rate}, "
-                f"min_rate={self.min_rate})")
+        return (
+            f"{self.__class__.__name__}(warmup={self.warmup}, "
+            f"decay_rate={self.decay_rate:.6f}, peak_rate={self.peak_rate}, "
+            f"min_rate={self.min_rate})"
+        )
