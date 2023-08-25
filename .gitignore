@@ -7,3 +7,6 @@ docs/build/*
 __pycache__
 *.pyc
 jnmt
+models/*
+test/*
+scripts/orig/*
