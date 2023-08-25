@@ -293,7 +293,7 @@ def main(args) -> None:  # pylint: disable=redefined-outer-name
             if "tokenizer_cfg" in trg_cfg else "none",
         ),
     }
-
+    print(cfg["data"])
     train_data = build_dataset(
         dataset_type=cfg["data"]["dataset_type"],
         path=cfg["data"]["train"],

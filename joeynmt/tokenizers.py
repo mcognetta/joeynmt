@@ -7,6 +7,7 @@ import logging
 import shutil
 from pathlib import Path
 from typing import Dict, List, Union
+import os
 
 import sentencepiece as sp
 from subword_nmt import apply_bpe
@@ -247,6 +248,7 @@ class SubwordNMTTokenizer(BasicTokenizer):
         assert self.level == "bpe"
 
         codes_file = Path(kwargs["codes"])
+        print(f"CODES FILE {codes_file}")
         assert codes_file.is_file(), f"codes file {codes_file} not found."
 
         self.separator: str = kwargs.get("separator", "@@")
@@ -266,6 +268,7 @@ class SubwordNMTTokenizer(BasicTokenizer):
             bpe_args.glossaries,
         )
         self.codes: Path = bpe_args.codes
+        print(f"CODES {self.codes}")
 
     def __call__(self, raw_input: str, is_train: bool = False) -> List[str]:
         """Tokenize"""
@@ -308,7 +311,11 @@ class SubwordNMTTokenizer(BasicTokenizer):
 
     def copy_cfg_file(self, model_dir: Path) -> None:
         """Copy config file to model_dir"""
-        shutil.copy2(self.codes, (model_dir / self.codes.name).as_posix())
+        print(f"COPYING {self.codes.name} -> {(model_dir / self.codes.name).as_posix()}")
+        # os.copy(self.codes.name, (model_dir / self.codes.name).as_posix())
+        if not os.path.exists(os.path.dirname(model_dir / self.codes.name)):
+            os.makedirs(os.path.dirname(model_dir / self.codes.name))
+        shutil.copy2(self.codes.name, (model_dir / self.codes.name))
 
     def __repr__(self):
         return (f"{self.__class__.__name__}(level={self.level}, "

@@ -808,7 +808,9 @@ def train(cfg_file: str, skip_test: bool = False) -> None:
 
     # store the vocabs and tokenizers
     src_vocab.to_file(model_dir / "src_vocab.txt")
+    print(train_data.tokenizer[train_data.src_lang])
     if hasattr(train_data.tokenizer[train_data.src_lang], "copy_cfg_file"):
+        print("COPYING!")
         train_data.tokenizer[train_data.src_lang].copy_cfg_file(model_dir)
     trg_vocab.to_file(model_dir / "trg_vocab.txt")
     if hasattr(train_data.tokenizer[train_data.trg_lang], "copy_cfg_file"):

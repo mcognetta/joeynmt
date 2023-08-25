@@ -13,12 +13,12 @@ data:
         normalize: False
         level: "bpe"
         voc_min_freq: 1
-        voc_file: "test/data/iwslt14/bpe_vocab.txt"
+        voc_file: "test/data/iwslt14/vocab.de.txt"
         tokenizer_type: "subword-nmt"
         tokenizer_cfg:
-            num_merges: 32000
-            codes: "test/data/iwslt14/bpe.32000"
-            pretokenizer: "none"
+            num_merges: 6000
+            codes: "test/data/iwslt14/bpe.6000.de"
+            pretokenizer: "moses"
     trg:
         lang: "en"
         max_length: 62
@@ -26,12 +26,12 @@ data:
         normalize: False
         level: "bpe"
         voc_min_freq: 1
-        voc_file: "test/data/iwslt14/bpe_vocab.txt"
+        voc_file: "test/data/iwslt14/vocab.en.txt"
         tokenizer_type: "subword-nmt"
         tokenizer_cfg:
-            num_merges: 32000
-            codes: "test/data/iwslt14/bpe.32000"
-            pretokenizer: "none"
+            num_merges: 6000
+            codes: "test/data/iwslt14/bpe.6000.en"
+            pretokenizer: "moses"
 
 testing:
     n_best: 1
@@ -53,25 +53,25 @@ training:
     optimizer: "adam"
     normalization: "tokens"
     adam_betas: [0.9, 0.999]
-    scheduling: "plateau"
-    patience: 5
-    decrease_factor: 0.7
+    scheduling: "warmupinversesquareroot"
+    learning_rate_warmup: 4000
     loss: "crossentropy"
-    learning_rate: 0.0003
+    learning_rate: 0.0005
     learning_rate_min: 0.00000001
     weight_decay: 0.0
     label_smoothing: 0.1
     batch_size: 4096
     batch_type: "token"
     early_stopping_metric: "bleu"
+    patience: 5
     epochs: 100
-    validation_freq: 1000
+    validation_freq: 2000
     logging_freq: 100
     model_dir: "models/transformer_iwslt14_deen_bpe"
     overwrite: False
     shuffle: True
     use_cuda: True
-    print_valid_sents: [0, 1, 2, 3, 4]
+    print_valid_sents: [5, 10, 15, 20, 25]
     keep_best_ckpts: 5
 
 model:
@@ -80,18 +80,17 @@ model:
     embed_init_gain: 1.0
     init_gain: 1.0
     bias_initializer: "zeros"
-    tied_embeddings: True
     tied_softmax: True
     encoder:
         type: "transformer"
         num_layers: 6
         num_heads: 4
         embeddings:
-            embedding_dim: 256
+            embedding_dim: 512
             scale: True
             dropout: 0.
         # typically ff_size = 4 x hidden_size
-        hidden_size: 256
+        hidden_size: 512
         ff_size: 1024
         dropout: 0.3
         layer_norm: "pre"
@@ -101,11 +100,11 @@ model:
         num_layers: 6
         num_heads: 4
         embeddings:
-            embedding_dim: 256
+            embedding_dim: 512
             scale: True
             dropout: 0.
         # typically ff_size = 4 x hidden_size
-        hidden_size: 256
+        hidden_size: 512
         ff_size: 1024
         dropout: 0.3
         layer_norm: "pre"

@@ -7,3 +7,7 @@ docs/build/*
 __pycache__
 *.pyc
 jnmt
+test/*
+models/*
+nohup.out
+scripts/orig/*
