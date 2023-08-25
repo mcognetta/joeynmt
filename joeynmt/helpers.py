@@ -207,9 +207,21 @@ def parse_train_args(cfg: Dict, mode: str = "training") -> Tuple:
     model_dir: Path = Path(cfg["model_dir"])
     assert model_dir.is_dir(), f"{model_dir} not found."
 
-    use_cuda: bool = cfg["use_cuda"] and torch.cuda.is_available()
-    device = torch.device("cuda" if use_cuda else "cpu")
-    n_gpu: int = torch.cuda.device_count() if use_cuda else 0
+    use_cuda: bool = (cfg["use_cuda"] or "cuda_device" in cfg) and torch.cuda.is_available()
+    if use_cuda:
+        device = torch.device(cfg["cuda_device"])
+    else:
+        device = torch.device("cpu")
+    
+    if use_cuda:
+        if "cuda_device" in cfg:
+            n_gpu: int = 1
+        else:
+            n_gpu: int = torch.cuda.device_count()
+    else:
+        n_gpu: int = 0
+    
+    # n_gpu: int = torch.cuda.device_count() if use_cuda else 0
     num_workers: int = cfg.get("num_workers", 0)
     if num_workers > 0:
         num_workers = min(cpu_count(), num_workers)
