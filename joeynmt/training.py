@@ -70,6 +70,7 @@ class TrainManager:
             validation_freq,
             log_valid_sents,
             early_stopping_metric,
+            validation_step_patience,
             seed,
             shuffle,
             epochs,
@@ -109,8 +110,9 @@ class TrainManager:
 
         # optimization
         self.clip_grad_fun = build_gradient_clipper(config=cfg["training"])
-        self.optimizer = build_optimizer(config=cfg["training"],
-                                         parameters=self.model.parameters())
+        self.optimizer = build_optimizer(
+            config=cfg["training"], parameters=self.model.parameters()
+        )
 
         # fp16
         self.fp16: bool = fp16  # True or False for scaler
@@ -133,6 +135,8 @@ class TrainManager:
             self.minimize_metric = True
         elif self.early_stopping_metric in ["acc", "bleu", "chrf"]:  # higher is better
             self.minimize_metric = False
+
+        self.validation_step_patience = validation_step_patience
 
         # learning rate scheduling
         self.scheduler, self.scheduler_step_at = build_scheduler(
@@ -217,10 +221,16 @@ class TrainManager:
             float('nan'), the queue won't be updated.
         """
         model_path = Path(self.model_dir) / f"{self.stats.steps}.ckpt"
-        model_state_dict = (self.model.module.state_dict() if isinstance(
-            self.model, torch.nn.DataParallel) else self.model.state_dict())
-        train_iter_state = self.train_iter.batch_sampler.sampler.generator.get_state() \
-            if hasattr(self.train_iter.batch_sampler.sampler, 'generator') else None
+        model_state_dict = (
+            self.model.module.state_dict()
+            if isinstance(self.model, torch.nn.DataParallel)
+            else self.model.state_dict()
+        )
+        train_iter_state = (
+            self.train_iter.batch_sampler.sampler.generator.get_state()
+            if hasattr(self.train_iter.batch_sampler.sampler, "generator")
+            else None
+        )
         # yapf: disable
         state = {
             "steps": self.stats.steps,
@@ -315,8 +325,10 @@ class TrainManager:
             logger.info("Reset optimizer.")
 
         if not reset_scheduler:
-            if (model_checkpoint["scheduler_state"] is not None
-                    and self.scheduler is not None):
+            if (
+                model_checkpoint["scheduler_state"] is not None
+                and self.scheduler is not None
+            ):
                 self.scheduler.load_state_dict(model_checkpoint["scheduler_state"])
         else:
             logger.info("Reset scheduler.")
@@ -378,7 +390,8 @@ class TrainManager:
 
         if self.train_iter_state is not None:
             self.train_iter.batch_sampler.sampler.generator.set_state(
-                self.train_iter_state.cpu())
+                self.train_iter_state.cpu()
+            )
 
         #################################################################
         # simplify accumulation logic:
@@ -487,12 +500,14 @@ class TrainManager:
                             elapsed = time.time() - start - total_valid_duration
                             elapsed_tok = self.stats.total_tokens - start_tokens
                             elapsed_correct = self.stats.total_correct - start_correct
-                            self.tb_writer.add_scalar("train/batch_loss",
-                                                      total_batch_loss,
-                                                      self.stats.steps)
-                            self.tb_writer.add_scalar("train/batch_acc",
-                                                      elapsed_correct / elapsed_tok,
-                                                      self.stats.steps)
+                            self.tb_writer.add_scalar(
+                                "train/batch_loss", total_batch_loss, self.stats.steps
+                            )
+                            self.tb_writer.add_scalar(
+                                "train/batch_acc",
+                                elapsed_correct / elapsed_tok,
+                                self.stats.steps,
+                            )
                             logger.info(
                                 "Epoch %3d, "
                                 "Step: %8d, "
@@ -526,16 +541,28 @@ class TrainManager:
                         if current_lr < self.learning_rate_min:
                             self.stats.is_min_lr = True
 
-                        self.tb_writer.add_scalar("train/learning_rate", current_lr,
-                                                  self.stats.steps)
+                        self.tb_writer.add_scalar(
+                            "train/learning_rate", current_lr, self.stats.steps
+                        )
 
                     if self.stats.is_min_lr or self.stats.is_max_update:
                         break
 
-                if self.stats.is_min_lr or self.stats.is_max_update:
-                    log_str = (f"minimum lr {self.learning_rate_min}"
-                               if self.stats.is_min_lr else
-                               f"maximum num. of updates {self.max_updates}")
+                if (
+                    self.stats.is_min_lr
+                    or self.stats.is_max_update
+                    or (
+                        0
+                        < self.validation_step_patience
+                        <= self.stats.validation_steps_since_last_improvement
+                    )
+                ):
+                    if self.stats.is_min_lr:
+                        log_str = "minimum lr {self.learning_rate_min}"
+                    elif self.stats.is_max_update:
+                        log_str = f"maximum num. of updates {self.max_updates}"
+                    else:
+                        log_str = f"validation has not improved in {self.stats.validation_steps_since_last_improvement} runs"
                     logger.info("Training ended since %s was reached.", log_str)
                     break
 
@@ -547,8 +574,7 @@ class TrainManager:
             else:
                 logger.info("Training ended after %3d epochs.", epoch_no + 1)
             logger.info(
-                "Best validation result (greedy) "
-                "at step %8d: %6.2f %s.",
+                "Best validation result (greedy) " "at step %8d: %6.2f %s.",
                 self.stats.best_ckpt_iter,
                 self.stats.best_ckpt_score,
                 self.early_stopping_metric,
@@ -570,12 +596,13 @@ class TrainManager:
         # reactivate training
         self.model.train()
 
-        with torch.autocast(device_type=self.device.type,
-                            dtype=self.dtype,
-                            enabled=self.fp16):
+        with torch.autocast(
+            device_type=self.device.type, dtype=self.dtype, enabled=self.fp16
+        ):
             # get loss (run as during training with teacher forcing)
-            batch_loss, _, _, correct_tokens = self.model(return_type="loss",
-                                                          **vars(batch))
+            batch_loss, _, _, correct_tokens = self.model(
+                return_type="loss", **vars(batch)
+            )
 
         # normalize batch loss
         norm_batch_loss = batch.normalize(
@@ -633,8 +660,9 @@ class TrainManager:
         # for eval_metric in ['loss', 'ppl', 'acc'] + self.eval_metrics:
         for eval_metric, score in valid_scores.items():
             if not math.isnan(score):
-                self.tb_writer.add_scalar(f"valid/{eval_metric}", score,
-                                          self.stats.steps)
+                self.tb_writer.add_scalar(
+                    f"valid/{eval_metric}", score, self.stats.steps
+                )
 
         ckpt_score = valid_scores[self.early_stopping_metric]
 
@@ -650,10 +678,16 @@ class TrainManager:
                 "Hooray! New best validation result [%s]!",
                 self.early_stopping_metric,
             )
+            self.stats.validation_steps_since_last_improvement = 0
+        else:
+            self.stats.validation_steps_since_last_improvement += 1
 
         # save checkpoints
-        is_better = (self.stats.is_better(ckpt_score, self.ckpt_queue)
-                     if len(self.ckpt_queue) > 0 else True)
+        is_better = (
+            self.stats.is_better(ckpt_score, self.ckpt_queue)
+            if len(self.ckpt_queue) > 0
+            else True
+        )
         if self.num_ckpts < 0 or is_better:
             self._save_checkpoint(new_best, ckpt_score)
 
@@ -668,8 +702,9 @@ class TrainManager:
         )
 
         # store validation set outputs
-        write_list_to_file(self.model_dir / f"{self.stats.steps}.hyps",
-                           valid_hypotheses)
+        write_list_to_file(
+            self.model_dir / f"{self.stats.steps}.hyps", valid_hypotheses
+        )
 
         # store attention plots for selected valid sentences
         if valid_attention_scores:
@@ -696,10 +731,15 @@ class TrainManager:
 
         valid_file = self.model_dir / "validations.txt"
         with valid_file.open("a", encoding="utf-8") as opened_file:
-            score_str = "\t".join([f"Steps: {self.stats.steps}"] + [
-                f"{eval_metric}: {score:.5f}"
-                for eval_metric, score in valid_scores.items() if not math.isnan(score)
-            ] + [f"LR: {current_lr:.8f}", "*" if new_best else ""])
+            score_str = "\t".join(
+                [f"Steps: {self.stats.steps}"]
+                + [
+                    f"{eval_metric}: {score:.5f}"
+                    for eval_metric, score in valid_scores.items()
+                    if not math.isnan(score)
+                ]
+                + [f"LR: {current_lr:.8f}", "*" if new_best else ""]
+            )
             opened_file.write(f"{score_str}\n")
 
     def _log_examples(
@@ -736,7 +776,6 @@ class TrainManager:
             logger.info("\tHypothesis: %s", hypotheses[p])
 
     class TrainStatistics:
-
         def __init__(
             self,
             steps: int = 0,
@@ -747,6 +786,7 @@ class TrainManager:
             best_ckpt_score: float = float("inf"),
             minimize_metric: bool = True,
             total_correct: int = 0,
+            validation_steps_since_last_improvement: int = 0,
         ) -> None:
             self.steps = steps  # global update step counter
             self.is_min_lr = is_min_lr  # stop by reaching learning rate minimum
@@ -756,6 +796,9 @@ class TrainManager:
             self.best_ckpt_score = best_ckpt_score  # initial values for best scores
             self.minimize_metric = minimize_metric  # minimize or maximize score
             self.total_correct = total_correct  # number of correct tokens seen so far
+            self.validation_steps_since_last_improvement = (
+                validation_steps_since_last_improvement
+            )
 
         def is_best(self, score):
             if self.minimize_metric:
@@ -804,7 +847,8 @@ def train(cfg_file: str, skip_test: bool = False) -> None:
 
     # load the data
     src_vocab, trg_vocab, train_data, dev_data, test_data = load_data(
-        data_cfg=cfg["data"])
+        data_cfg=cfg["data"]
+    )
 
     # store the vocabs and tokenizers
     src_vocab.to_file(model_dir / "src_vocab.txt")
