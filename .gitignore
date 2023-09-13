@@ -10,3 +10,6 @@ jnmt
 models/*
 test/*
 scripts/orig/*
+
+nohup.out
+*/nohup.out
