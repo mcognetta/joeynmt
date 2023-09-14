@@ -13,6 +13,12 @@ from typing import Dict, List
 import sentencepiece as sp
 from subword_nmt import apply_bpe, learn_bpe
 
+from tokenizers import Tokenizer
+from tokenizers.models import BPE
+from tokenizers.trainers import BpeTrainer
+from tokenizers.pre_tokenizers import Whitespace, WhitespaceSplit
+from tokenizers.normalizers import Lowercase
+
 from joeynmt.constants import (
     BOS_ID,
     BOS_TOKEN,
@@ -160,6 +166,69 @@ def train_bpe(
             total_symbols=False,
         )
 
+# def build_bpe_tokenizer(path, vocab_size, outpath=None, other_paths=[], to_lower=False):
+#     tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
+#     trainer = BpeTrainer(
+#         vocab_size=vocab_size,
+#         special_tokens=["[UNK]", "[SEP]", "[PAD]", "[MASK]", "[SOS]", "[EOS]", "[CLS]"],
+#         continuing_subword_prefix="__",
+#         end_of_word_suffix="",
+#         show_progress=False,
+#     )
+#     if to_lower:
+#         tokenizer.normalizer = Lowercase()
+#     tokenizer.pre_tokenizer = WhitespaceSplit()
+#     tokenizer.train([path] + other_paths, trainer)
+#     tokenizer.add_special_tokens(
+#         ["[UNK]", "[SEP]", "[PAD]", "[MASK]", "[SOS]", "[EOS]", "[CLS]"]
+#     )
+#     if outpath:
+#         tokenizer.save(outpath)
+#     return tokenizer
+
+def train_hf_bpe(
+    sents: List[str],
+    vocab_size: int,
+    model_file: str,
+) -> None:
+    """
+    Train BPE Model
+    See: https://github.com/rsennrich/subword-nmt/blob/master/subword_nmt/learn_bpe.py
+
+    :param sents: sentence list from training set
+    :param num_merges: number of merges.
+        Resulting vocabulary size can be slightly smaller or larger.
+    :param min_freq: minimum frequency for a token to become part of the vocabulary
+    :param codes: codes file. should not exist before bpe training, will be overwritten!
+    """
+    model_file = Path(model_file)
+    if model_file.is_file():
+        print(f"### Model file {model_file} will be overwitten.")
+
+    with tempfile.NamedTemporaryFile(prefix="huggingface_bpe_", suffix=".txt") as temp:
+        txt_file = Path(temp.name)
+        write_list_to_file(txt_file, sents)
+
+        tokenizer = Tokenizer(BPE(unk_token=UNK_TOKEN))
+        tokenizer.pre_tokenizer = Whitespace()
+        trainer = BpeTrainer(
+            vocab_size=vocab_size,
+            special_tokens=[BOS_TOKEN, EOS_TOKEN, PAD_TOKEN, UNK_TOKEN],
+            continuing_subword_prefix="__",
+            end_of_word_suffix="",
+            show_progress=False,
+        )
+        
+        print("### Training bpe...")
+        print(f"VOCAB SIZE {vocab_size}")
+        print(temp.name)
+        print(model_file.name)
+        tokenizer.train([temp.name], trainer)
+        tokenizer.add_special_tokens(
+            [BOS_TOKEN, EOS_TOKEN, PAD_TOKEN, UNK_TOKEN]
+        )
+        tokenizer.save(model_file.as_posix())
+
 
 def save_bpe(
         sents: List[str],
@@ -262,6 +331,8 @@ def run(
                 min_freq=min_freq,
                 **tokenizer_cfg,
             )
+        elif tokenizer_type == "huggingface_bpe":
+            train_hf_bpe(sents = sents, vocab_size = tokenizer_cfg["num_merges"], model_file = tokenizer_cfg["model_file"])
         else:
             raise ConfigurationError(f"{tokenizer_type}: Unknown tokenizer type.")
             # TODO: support fastBPE training! https://github.com/glample/fastBPE

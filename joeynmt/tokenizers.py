@@ -3,6 +3,7 @@
 Tokenizer module
 """
 import argparse
+import json
 import logging
 import os
 import shutil
@@ -11,6 +12,12 @@ from typing import Dict, List, Union
 
 import sentencepiece as sp
 from subword_nmt import apply_bpe
+
+from tokenizers import Tokenizer
+from tokenizers.models import BPE
+from tokenizers.trainers import BpeTrainer
+from tokenizers.pre_tokenizers import WhitespaceSplit
+from tokenizers.normalizers import Lowercase
 
 from joeynmt.constants import BOS_TOKEN, EOS_TOKEN, PAD_TOKEN, UNK_TOKEN
 from joeynmt.helpers import ConfigurationError, remove_extra_spaces, unicode_normalize
@@ -335,6 +342,122 @@ class SubwordNMTTokenizer(BasicTokenizer):
                 f"separator={self.separator}, dropout={self.dropout})")
 
 
+# def build_bpe_tokenizer(path, vocab_size, outpath=None, other_paths=[], to_lower=False):
+#     tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
+#     trainer = BpeTrainer(
+#         vocab_size=vocab_size,
+#         special_tokens=["[UNK]", "[SEP]", "[PAD]", "[MASK]", "[SOS]", "[EOS]", "[CLS]"],
+#         continuing_subword_prefix="__",
+#         end_of_word_suffix="",
+#         show_progress=False,
+#     )
+#     if to_lower:
+#         tokenizer.normalizer = Lowercase()
+#     tokenizer.pre_tokenizer = WhitespaceSplit()
+#     tokenizer.train([path] + other_paths, trainer)
+#     tokenizer.add_special_tokens(
+#         ["[UNK]", "[SEP]", "[PAD]", "[MASK]", "[SOS]", "[EOS]", "[CLS]"]
+#     )
+#     if outpath:
+#         tokenizer.save(outpath)
+#     return tokenizer
+
+class HuggingFaceBPETokenizer(BasicTokenizer):
+
+    def __init__(
+        self,
+        level: str = "bpe",
+        lowercase: bool = False,
+        normalize: bool = False,
+        max_length: int = -1,
+        min_length: int = -1,
+        **kwargs,
+    ):
+        super().__init__(level, lowercase, normalize, max_length, min_length, **kwargs)
+        assert self.level == "bpe"
+
+        model_file = Path(kwargs["model_file"])
+        self.model_file = model_file
+        assert model_file.is_file(), f"model file {model_file} not found."
+
+        self.separator: str = kwargs.get("separator", "__")
+        self.dropout: float = kwargs.get("dropout", 0.0)
+
+        j = json.load(open(model_file.as_posix()))
+        j['model']['dropout'] = None
+
+        self._model = Tokenizer.from_str(json.dumps(j))
+
+    def __call__(self, raw_input: str, is_train: bool = False) -> List[str]:
+        """Tokenize"""
+        # dropout = self.dropout if is_train else 0.0
+
+        tokenized = self._model.encode(raw_input).tokens
+
+        # tokenized = self.bpe.process_line(raw_input, dropout).strip().split()
+        if is_train and self._filter_by_length(len(tokenized)):
+            return None
+        return tokenized
+
+    def post_process(self,
+                     sequence: Union[List[str], str],
+                     generate_unk: bool = True) -> str:
+        """Detokenize"""
+        if isinstance(sequence, list):
+            sequence = self._remove_special(sequence, generate_unk=generate_unk)
+
+            # Remove separators, join with spaces
+            # sequence = self.SPACE.join(sequence).replace(self.separator + self.SPACE,
+            #                                              "")
+
+            sequence = self.SPACE.join(sequence).replace(self.SPACE + self.separator, '')
+        
+            # Remove final merge marker.
+            if sequence.endswith(self.separator):
+                sequence = sequence[:-len(self.separator)]
+            if sequence.beginswith(self.separator):
+                sequence = sequence[len(self.separator):]
+
+        # Moses detokenizer
+        if self.pretokenizer == "moses":
+            sequence = self.moses_detokenizer.detokenize(sequence.split())
+
+        # Remove extra spaces
+        if self.normalize:
+            sequence = remove_extra_spaces(sequence)
+
+        # ensure the string is not empty.
+        assert sequence is not None and len(sequence) > 0, sequence
+        return sequence
+
+    # def set_vocab(self, itos: List[str]) -> None:
+    #     """Set vocab"""
+    #     vocab = set(itos) - set(self.SPECIALS)
+    #     self.bpe.vocab = vocab
+
+    def copy_cfg_file(self, model_dir: Path) -> None:
+        """Copy config file to model_dir"""
+        if (model_dir / self.model_file.name).is_file():
+            logger.warning(
+                "%s already exists. Stop copying.",
+                (model_dir / self.model_file.name).as_posix(),
+            )
+
+        # Verify that the correct directory structure exists before copying
+        if not os.path.exists(os.path.dirname(model_dir / self.model_file.name)):
+            os.makedirs(os.path.dirname(model_dir / self.model_file.name))
+
+        shutil.copy2(self.model_file, (model_dir / self.model_file.name).as_posix())
+
+    def __repr__(self):
+        return (f"{self.__class__.__name__}(level={self.level}, "
+                f"lowercase={self.lowercase}, normalize={self.normalize}, "
+                f"filter_by_length=({self.min_length}, {self.max_length}), "
+                f"pretokenizer={self.pretokenizer}, "
+                f"tokenizer={self._model.__class__.__name__}, "
+                f"separator={self.separator}, dropout={self.dropout})")
+
+
 def _build_tokenizer(cfg: Dict) -> BasicTokenizer:
     """Builds tokenizer."""
     tokenizer = None
@@ -375,6 +498,17 @@ def _build_tokenizer(cfg: Dict) -> BasicTokenizer:
                 min_length=cfg.get("min_length", -1),
                 **tokenizer_cfg,
             )
+        elif tokenizer_type == "huggingface_bpe":
+            assert "model_file" in tokenizer_cfg
+            tokenizer = HuggingFaceBPETokenizer(
+                level=cfg["level"],
+                lowercase=cfg.get("lowercase", False),
+                normalize=cfg.get("normalize", False),
+                max_length=cfg.get("max_length", -1),
+                min_length=cfg.get("min_length", -1),
+                **tokenizer_cfg,
+            )
+
         else:
             raise ConfigurationError(f"{tokenizer_type}: Unknown tokenizer type.")
     else:
