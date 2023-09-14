@@ -415,7 +415,7 @@ class HuggingFaceBPETokenizer(BasicTokenizer):
             # Remove final merge marker.
             if sequence.endswith(self.separator):
                 sequence = sequence[:-len(self.separator)]
-            if sequence.beginswith(self.separator):
+            if sequence.startswith(self.separator):
                 sequence = sequence[len(self.separator):]
 
         # Moses detokenizer

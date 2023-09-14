@@ -190,6 +190,7 @@ def train_hf_bpe(
     sents: List[str],
     vocab_size: int,
     model_file: str,
+    vocab_file: str,
 ) -> None:
     """
     Train BPE Model
@@ -228,6 +229,10 @@ def train_hf_bpe(
             [BOS_TOKEN, EOS_TOKEN, PAD_TOKEN, UNK_TOKEN]
         )
         tokenizer.save(model_file.as_posix())
+
+        vocab = [x for (x, _) in sorted(tokenizer.get_vocab().items(), key = lambda x: x[1])]
+        write_list_to_file(vocab_file, vocab)
+
 
 
 def save_bpe(
@@ -332,7 +337,7 @@ def run(
                 **tokenizer_cfg,
             )
         elif tokenizer_type == "huggingface_bpe":
-            train_hf_bpe(sents = sents, vocab_size = tokenizer_cfg["num_merges"], model_file = tokenizer_cfg["model_file"])
+            train_hf_bpe(sents = sents, vocab_size = tokenizer_cfg["num_merges"], model_file = tokenizer_cfg["model_file"], vocab_file = vocab_file)
         else:
             raise ConfigurationError(f"{tokenizer_type}: Unknown tokenizer type.")
             # TODO: support fastBPE training! https://github.com/glample/fastBPE
