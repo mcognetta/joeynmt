@@ -14,10 +14,10 @@ data:
         level: "bpe"
         voc_min_freq: 1
         tokenizer_type: "huggingface_bpe"
-        voc_file: "test/data/iwslt14/hf_bpe_vocab_de.txt"
+        voc_file: "test/data/iwslt14/new_hf_bpe_vocab_de.txt"
         tokenizer_cfg:
             num_merges: 6000
-            model_file: "test/data/iwslt14/hf_bpe.de"
+            model_file: "test/data/iwslt14/new_hf_bpe.de"
             pretokenizer: "moses"
     trg:
         lang: "en"
@@ -27,10 +27,10 @@ data:
         level: "bpe"
         voc_min_freq: 1
         tokenizer_type: "huggingface_bpe"
-        voc_file: "test/data/iwslt14/hf_bpe_vocab_en.txt"
+        voc_file: "test/data/iwslt14/new_hf_bpe_vocab_en.txt"
         tokenizer_cfg:
             num_merges: 6000
-            model_file: "test/data/iwslt14/hf_bpe.en"
+            model_file: "test/data/iwslt14/new_hf_bpe.en"
             pretokenizer: "moses"
 
 testing:
@@ -66,7 +66,7 @@ training:
     epochs: 100
     validation_freq: 1000
     logging_freq: 100
-    model_dir: "models/transformer_iwslt14_deen_hf_bpe"
+    model_dir: "models/transformer_iwslt14_deen_hf_bpe_new"
     overwrite: False
     shuffle: True
     use_cuda: True

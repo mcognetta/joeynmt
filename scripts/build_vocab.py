@@ -211,7 +211,7 @@ def train_hf_bpe(
         write_list_to_file(txt_file, sents)
 
         tokenizer = Tokenizer(BPE(unk_token=UNK_TOKEN))
-        tokenizer.pre_tokenizer = Whitespace()
+        tokenizer.pre_tokenizer = WhitespaceSplit()
         trainer = BpeTrainer(
             vocab_size=vocab_size,
             special_tokens=[BOS_TOKEN, EOS_TOKEN, PAD_TOKEN, UNK_TOKEN],
